@@ -1,86 +1,94 @@
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DB_FILE = path.join(__dirname, 'datos.json');
+
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://tktwssvukmtfszuaqruy.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_NX7zkmKgg0UDYuYvaUkfmQ_y2cC7HfG';
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-function leerDatos() {
-  if (!fs.existsSync(DB_FILE)) return { movimientos: [], recurrentes: [] };
-  const datos = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
-  // Migrar formato viejo (lista de gastos)
-  if (Array.isArray(datos)) {
-    return {
-      movimientos: datos.map(g => ({ ...g, tipo: 'gasto' })),
-      recurrentes: [],
-    };
-  }
-  if (!datos.recurrentes) datos.recurrentes = [];
-  return datos;
-}
-
-function guardarDatos(datos) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(datos, null, 2));
+// Función auxiliar para hablar con Supabase
+async function sb(tabla, opciones = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${tabla}`, {
+    method: opciones.method || 'GET',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    },
+    body: opciones.body ? JSON.stringify(opciones.body) : undefined,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 }
 
 // --- Movimientos ---
-app.get('/api/movimientos', (req, res) => res.json(leerDatos().movimientos));
+app.get('/api/movimientos', async (req, res) => {
+  try {
+    res.json(await sb('movimientos?select=*&order=fecha.desc'));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
-app.post('/api/movimientos', (req, res) => {
+app.post('/api/movimientos', async (req, res) => {
   const { tipo, descripcion, monto, categoria, fecha } = req.body;
   if (!tipo || !descripcion || !monto || !categoria || !fecha) {
     return res.status(400).json({ error: 'Faltan datos' });
   }
-  const datos = leerDatos();
-  const mov = { id: Date.now(), tipo, descripcion, monto: parseFloat(monto), categoria, fecha };
-  datos.movimientos.push(mov);
-  guardarDatos(datos);
-  res.json(mov);
+  try {
+    const creado = await sb('movimientos', { method: 'POST', body: { tipo, descripcion, monto, categoria, fecha } });
+    res.json(creado[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/movimientos/:id', (req, res) => {
-  const datos = leerDatos();
-  datos.movimientos = datos.movimientos.filter(m => m.id !== parseInt(req.params.id));
-  guardarDatos(datos);
-  res.json({ ok: true });
+app.delete('/api/movimientos/:id', async (req, res) => {
+  try {
+    await sb(`movimientos?id=eq.${req.params.id}`, { method: 'DELETE' });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // --- Pagos recurrentes ---
-app.get('/api/recurrentes', (req, res) => res.json(leerDatos().recurrentes));
+app.get('/api/recurrentes', async (req, res) => {
+  try {
+    res.json(await sb('recurrentes?select=*'));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
-app.post('/api/recurrentes', (req, res) => {
+app.post('/api/recurrentes', async (req, res) => {
   const { descripcion, monto, categoria, dia } = req.body;
   if (!descripcion || !monto || !categoria || !dia) {
     return res.status(400).json({ error: 'Faltan datos' });
   }
-  const datos = leerDatos();
-  const rec = { id: Date.now(), descripcion, monto: parseFloat(monto), categoria, dia: parseInt(dia) };
-  datos.recurrentes.push(rec);
-  guardarDatos(datos);
-  res.json(rec);
+  try {
+    const creado = await sb('recurrentes', { method: 'POST', body: { descripcion, monto, categoria, dia } });
+    res.json(creado[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/recurrentes/:id', (req, res) => {
-  const datos = leerDatos();
-  datos.recurrentes = datos.recurrentes.filter(r => r.id !== parseInt(req.params.id));
-  guardarDatos(datos);
-  res.json({ ok: true });
+app.delete('/api/recurrentes/:id', async (req, res) => {
+  try {
+    await sb(`recurrentes?id=eq.${req.params.id}`, { method: 'DELETE' });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Registrar un pago recurrente como gasto
-app.post('/api/recurrentes/:id/pagar', (req, res) => {
-  const datos = leerDatos();
-  const rec = datos.recurrentes.find(r => r.id === parseInt(req.params.id));
-  if (!rec) return res.status(404).json({ error: 'No encontrado' });
-  const hoy = new Date().toISOString().slice(0, 10);
-  const mov = { id: Date.now(), tipo: 'gasto', descripcion: rec.descripcion, monto: rec.monto, categoria: rec.categoria, fecha: hoy };
-  datos.movimientos.push(mov);
-  guardarDatos(datos);
-  res.json(mov);
+app.post('/api/recurrentes/:id/pagar', async (req, res) => {
+  try {
+    const recs = await sb(`recurrentes?id=eq.${req.params.id}`);
+    if (!recs.length) return res.status(404).json({ error: 'No encontrado' });
+    const rec = recs[0];
+    const hoy = new Date().toISOString().slice(0, 10);
+    const creado = await sb('movimientos', {
+      method: 'POST',
+      body: { tipo: 'gasto', descripcion: rec.descripcion, monto: rec.monto, categoria: rec.categoria, fecha: hoy },
+    });
+    res.json(creado[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.listen(PORT, '0.0.0.0', () => {
