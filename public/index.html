@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#4a6cf7">
+  <link rel="manifest" href="manifest.json">
+  <title>Mis Finanzas</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>💰 Mis Finanzas</h1>
+
+    <section class="card resumen">
+      <div class="dato"><span>Ingresos</span><strong id="total-ingresos" class="verde">$0.00</strong></div>
+      <div class="dato"><span>Gastos</span><strong id="total-gastos" class="rojo">$0.00</strong></div>
+      <div class="dato"><span>Balance</span><strong id="balance">$0.00</strong></div>
+    </section>
+
+    <section class="card">
+      <h2>Registrar movimiento</h2>
+      <form id="form-mov">
+        <select id="tipo">
+          <option value="gasto">Gasto</option>
+          <option value="ingreso">Ingreso</option>
+        </select>
+        <input type="text" id="descripcion" placeholder="Descripción" required>
+        <input type="number" id="monto" placeholder="Monto" step="0.01" required>
+        <select id="categoria">
+          <option>Comida</option>
+          <option>Transporte</option>
+          <option>Vivienda</option>
+          <option>Entretenimiento</option>
+          <option>Salud</option>
+          <option>Salario</option>
+          <option>Otros</option>
+        </select>
+        <input type="date" id="fecha" required>
+        <button type="submit">Agregar</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Pagos recurrentes</h2>
+      <form id="form-rec">
+        <input type="text" id="rec-descripcion" placeholder="Ej: Netflix, Renta" required>
+        <input type="number" id="rec-monto" placeholder="Monto" step="0.01" required>
+        <input type="number" id="rec-dia" placeholder="Día del mes" min="1" max="31" required>
+        <select id="rec-categoria">
+          <option>Vivienda</option>
+          <option>Entretenimiento</option>
+          <option>Salud</option>
+          <option>Transporte</option>
+          <option>Otros</option>
+        </select>
+        <button type="submit">Agregar</button>
+      </form>
+      <ul id="lista-recurrentes"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Gastos por categoría</h2>
+      <canvas id="graficoCategorias"></canvas>
+    </section>
+
+    <section class="card">
+      <h2>Ingresos vs Gastos por mes</h2>
+      <canvas id="graficoMeses"></canvas>
+    </section>
+
+    <section class="card">
+      <h2>Historial</h2>
+      <ul id="lista-movimientos"></ul>
+    </section>
+  </div>
+  <script src="app.js"></script>
+  <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');</script>
+</body>
+</html>
